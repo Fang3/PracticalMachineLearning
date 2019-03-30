@@ -1,2 +1,0 @@
-# PracticalMachineLearning
-Final Project
