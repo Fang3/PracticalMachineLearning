@@ -1,5 +1,6 @@
 ## Practical Machine Learning Project
-*Predict the manner people did the exercise*
+**Predict the manner people did the exercise**
+
 Date: March 30, 2019
 
 ### Overview
