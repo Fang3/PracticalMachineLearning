@@ -1,0 +1,167 @@
+---
+title: "Practical Machine Learning Project"
+subtitle: "Predict the manner people did the exercise"
+date: "March 30, 2019"
+output: md_document
+---
+
+### Overview 
+
+The objective of this project is to use the data collected through wearable devices, such as Jawbone Up, Fitbit to monitor personal activities and predict how they perform the exercise.
+
+The data we use in this analysis is from the source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+We use the training data to create our model and test data to evaluate the model performance. 
+
+### Data Exploration
+
+First, we read in the data and explore the dataset to see the attributes, data type. We also take a look at the distributiont of our response variable (classe).
+
+*Please see appendix for outputs*
+
+```{r results='hide',warning=FALSE, message=FALSE}
+library(mlbench)
+library(caret)
+library(parallel)
+library(iterators)
+library(foreach)
+library(doParallel)
+library(corrplot)
+
+training = read.csv('pml-training.csv',header=T)
+testing = read.csv('pml-testing.csv',header=T)
+head(training)
+dim(training) # 19622 160
+str(training)
+```
+```{r}
+table(training$classe)
+```
+
+### Data Pre-Processing
+
+After viewing the data, we decided to convert factor variables to numeric variables and check missing data. We tranformed variables with missing values into indicators.
+
+```{r warning=FALSE}
+training$kurtosis_roll_belt = as.numeric(as.character(training$kurtosis_roll_belt))
+training$kurtosis_picth_belt = as.numeric(as.character(training$kurtosis_picth_belt))
+training$skewness_roll_belt = as.numeric(as.character(training$skewness_roll_belt))
+training$skewness_roll_belt.1 = as.numeric(as.character(training$skewness_roll_belt.1))
+training$max_yaw_belt = as.numeric(as.character(training$max_yaw_belt))
+training$min_yaw_belt = as.numeric(as.character(training$min_yaw_belt))
+training$kurtosis_roll_arm = as.numeric(as.character(training$kurtosis_roll_arm))
+training$kurtosis_picth_arm = as.numeric(as.character(training$kurtosis_picth_arm))
+training$skewness_yaw_arm = as.numeric(as.character(training$skewness_yaw_arm))
+training$kurtosis_roll_dumbbell = as.numeric(as.character(training$kurtosis_roll_dumbbell))
+training$kurtosis_picth_dumbbell = as.numeric(as.character(training$kurtosis_picth_dumbbell))
+training$max_yaw_dumbbell = as.numeric(as.character(training$max_yaw_dumbbell))
+training$min_yaw_dumbbell = as.numeric(as.character(training$min_yaw_dumbbell))
+training$kurtosis_roll_forearm = as.numeric(as.character(training$kurtosis_roll_forearm))
+training$kurtosis_picth_forearm = as.numeric(as.character(training$kurtosis_picth_forearm))
+training$max_yaw_forearm = as.numeric(as.character(training$max_yaw_forearm))
+training$min_yaw_forearm = as.numeric(as.character(training$min_yaw_forearm))
+
+missing_cnt = sapply(training,function(x) sum(is.na(x)))
+table(missing_cnt) 
+for(col in names(training)){
+  if(sum(is.na(training[,col]))>0)
+    training[,col] = ifelse(is.na(training[,col]),0,1)
+}
+```
+
+### Model Building
+
+We split the data into training and testing set using 70/30 split. Excluded 4 variables that are not associated with our response variable. Then we calculated the correlation of all the variables and keep the top 30 variables that are relatively highly correlated with our response variable.
+
+```{r, fig.height=8,fig.width=8}
+set.seed(123)
+idx = createDataPartition(training$classe,p=0.7,list=FALSE)
+train = training[idx,]
+test = training[-idx,]
+
+yvar = as.numeric(train$classe)
+xvar = train[,sapply(train,is.numeric)]
+xvar = xvar[,-c(1,2,3,4)]
+
+allvar = cbind(xvar,yvar)
+m = abs(cor(allvar))
+corr_df = data.frame(row=rownames(m)[row(m)[upper.tri(m)]], 
+                     col=colnames(m)[col(m)[upper.tri(m)]], 
+                     corr=m[upper.tri(m)])
+corr_df_y = corr_df[which(corr_df$col=='yvar'),]
+corr_df_y2 = corr_df_y[order(-corr_df_y$corr),]
+
+# take top 30 variables that are most correlated with response
+
+corr_df_y2[1:30,c(1)]
+corr_org = cor(allvar)
+corrplot(corr_org[corr_df_y2[1:30,c(1)],corr_df_y2[1:30,c(1)]])
+```
+
+#### Random Forest
+
+Use the top 30 variables we selected and create a random foreset model using 5-fold cross-validation. Then we apply the model to the testing set. The accurary for the testing set is 0.9867 so the **out-of-sample error is 0.0133**. We consider this as a decent model so we decided to use the model in our validation (test) set to predict the 20 new cases.
+
+```{r}
+cluster = makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+fitControl = trainControl(method = "cv", number = 5, allowParallel = TRUE)
+rf_model = train(classe ~ pitch_forearm+magnet_arm_x+magnet_belt_y+magnet_arm_y+accel_arm_x+
+                 accel_forearm_x+magnet_forearm_x+magnet_belt_z+pitch_arm+magnet_arm_z+
+                 total_accel_forearm+magnet_dumbbell_z+total_accel_arm+accel_dumbbell_x+magnet_forearm_y+
+                 accel_arm_y+accel_belt_z+roll_arm+total_accel_belt+pitch_dumbbell+
+                 accel_dumbbell_z+roll_belt+magnet_dumbbell_x+total_accel_dumbbell+yaw_forearm+
+                 roll_dumbbell+yaw_arm+accel_arm_z+magnet_forearm_z+gyros_dumbbell_y, 
+                 data=train, method="rf", trControl = fitControl)
+print(rf_model)
+plot(rf_model,main="Accuracy of Random forest model by number of predictors")
+test_pred = predict(rf_model,newdata=test)
+confusionMatrix(test$classe,test_pred)
+```
+
+### Prediction for the Validation Data
+
+Before we predict the test set, we applied the same transformation as training set: Convert factor variables to numeric variables and create missing indicators.
+
+The prediction result on the validation set is 100% accurate.
+
+```{r,results='hide'}
+testing$kurtosis_roll_belt = as.numeric(as.character(testing$kurtosis_roll_belt))
+testing$kurtosis_picth_belt = as.numeric(as.character(testing$kurtosis_picth_belt))
+testing$skewness_roll_belt = as.numeric(as.character(testing$skewness_roll_belt))
+testing$skewness_roll_belt.1 = as.numeric(as.character(testing$skewness_roll_belt.1))
+testing$max_yaw_belt = as.numeric(as.character(testing$max_yaw_belt))
+testing$min_yaw_belt = as.numeric(as.character(testing$min_yaw_belt))
+testing$kurtosis_roll_arm = as.numeric(as.character(testing$kurtosis_roll_arm))
+testing$kurtosis_picth_arm = as.numeric(as.character(testing$kurtosis_picth_arm))
+testing$skewness_yaw_arm = as.numeric(as.character(testing$skewness_yaw_arm))
+testing$kurtosis_roll_dumbbell = as.numeric(as.character(testing$kurtosis_roll_dumbbell))
+testing$kurtosis_picth_dumbbell = as.numeric(as.character(testing$kurtosis_picth_dumbbell))
+testing$max_yaw_dumbbell = as.numeric(as.character(testing$max_yaw_dumbbell))
+testing$min_yaw_dumbbell = as.numeric(as.character(testing$min_yaw_dumbbell))
+testing$kurtosis_roll_forearm = as.numeric(as.character(testing$kurtosis_roll_forearm))
+testing$kurtosis_picth_forearm = as.numeric(as.character(testing$kurtosis_picth_forearm))
+testing$max_yaw_forearm = as.numeric(as.character(testing$max_yaw_forearm))
+testing$min_yaw_forearm = as.numeric(as.character(testing$min_yaw_forearm))
+for(col in names(testing)){
+  if(sum(is.na(testing[,col]))>0)
+    testing[,col] = ifelse(is.na(testing[,col]),0,1)
+}
+
+```
+
+```{r}
+testing_pred = predict(rf_model,newdata=testing)
+testing_pred
+
+stopCluster(cluster)
+registerDoSEQ()
+
+```
+
+### Appendix
+
+```{r warning=FALSE, message=FALSE}
+head(training)
+dim(training) 
+str(training)
+```
