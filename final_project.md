@@ -117,7 +117,7 @@ variable.
     corr_org = cor(allvar)
     corrplot(corr_org[corr_df_y2[1:30,c(1)],corr_df_y2[1:30,c(1)]])
 
-![](final_project_files/figure-markdown_strict/unnamed-chunk-4-1.png)
+![](/unnamed-chunk-4-1.png)
 
 #### Random Forest
 
@@ -160,7 +160,7 @@ use the model in our validation (test) set to predict the 20 new cases.
 
     plot(rf_model,main="Accuracy of Random forest model by number of predictors")
 
-![](final_project_files/figure-markdown_strict/unnamed-chunk-5-1.png)
+![](/unnamed-chunk-5-1.png)
 
     test_pred = predict(rf_model,newdata=test)
     confusionMatrix(test$classe,test_pred)
