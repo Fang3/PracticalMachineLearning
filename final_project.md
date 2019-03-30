@@ -1,3 +1,6 @@
+## Practical Machine Learning Project
+## Predict the manner people did the exercise
+### Date: March 30, 2019
 ### Overview
 
 The objective of this project is to use the data collected through
